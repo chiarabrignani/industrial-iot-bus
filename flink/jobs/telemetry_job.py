@@ -1,6 +1,8 @@
 import json
 import psycopg2
 
+from alert_logic import check_alerts
+
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.functions import ProcessFunction
 
@@ -14,6 +16,7 @@ from pyflink.datastream.connectors.kafka import (
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common import WatermarkStrategy, Types
 
+ 
 
 class TelemetryProcessor(ProcessFunction):
     """
@@ -105,79 +108,25 @@ class TelemetryProcessor(ProcessFunction):
         try:
             data = json.loads(message)
 
-            # ------------------------------------------
             # SALVATAGGIO TELEMETRIA
-            # ------------------------------------------
-
             self.save_telemetry(data)
 
-            bus_id = data["bus_id"]
-            event_id = data["event_id"]
-            timestamp = data["timestamp"]
+            # CONTROLLO ALERT
+            alerts = check_alerts(data)
 
-            speed = data["speed"]
-            temperature = data["engine_temperature"]
-
-            alerts = []
-
-            # ------------------------------------------
-            # CONTROLLO VELOCITÀ
-            # ------------------------------------------
-
-            if speed > 90:
-
-                alert = {
-                    "event_id": event_id,
-                    "bus_id": bus_id,
-                    "alert_type": "OVERSPEED",
-                    "value": speed,
-                    "threshold": 90.0,
-                    "timestamp": timestamp
-                }
-
+            # SALVATAGGIO E INVIO ALERT
+            for alert in alerts:
                 self.save_alert(alert)
+                yield json.dumps(alert)
 
-                alerts.append(json.dumps(alert))
-
-            # ------------------------------------------
-            # CONTROLLO TEMPERATURA
-            # ------------------------------------------
-
-            if temperature > 100:
-
-                alert = {
-                    "event_id": event_id,
-                    "bus_id": bus_id,
-                    "alert_type": "ENGINE_OVERHEATING",
-                    "value": temperature,
-                    "threshold": 100.0,
-                    "timestamp": timestamp
-                }
-
-                self.save_alert(alert)
-
-                alerts.append(json.dumps(alert))
-
-            # ------------------------------------------
             # COMMIT POSTGRESQL
-            # ------------------------------------------
-
             self.connection.commit()
 
-            # ------------------------------------------
-            # INVIO ALERT A KAFKA
-            # ------------------------------------------
-
-            for alert in alerts:
-                yield alert
-
         except Exception as e:
-
             print(
-                f"Errore nell'elaborazione del messaggio: {e}"
+                  f"Errore nell'elaborazione del messaggio: {e}"
             )
-
-            self.connection.rollback()
+        self.connection.rollback()
 
     def close(self):
         """
