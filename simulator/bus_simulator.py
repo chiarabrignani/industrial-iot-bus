@@ -18,7 +18,30 @@ BUS_IDS = ["BUS_001", "BUS_002", "BUS_003"]
 def genera_telemetria(bus_id):
     """
     Genera una misura di telemetria per un autobus.
+
+    Nella maggior parte dei casi vengono generati
+    valori normali. Occasionalmente viene simulata
+    una condizione anomala.
     """
+
+    # Valori normali
+    speed = round(random.uniform(0, 90), 1)
+    engine_temperature = round(random.uniform(70, 100), 1)
+
+    # Circa il 5% delle telemetrie contiene un'anomalia
+    if random.random() < 0.05:
+
+        tipo_anomalia = random.choice([
+            "OVERSPEED",
+            "ENGINE_OVERHEATING",
+            "BOTH"
+        ])
+
+        if tipo_anomalia in ["OVERSPEED", "BOTH"]:
+            speed = round(random.uniform(91, 120), 1)
+
+        if tipo_anomalia in ["ENGINE_OVERHEATING", "BOTH"]:
+            engine_temperature = round(random.uniform(101, 120), 1)
 
     dati = {
         "event_id": str(uuid.uuid4()),
@@ -26,9 +49,9 @@ def genera_telemetria(bus_id):
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "latitude": round(random.uniform(44.48, 44.51), 6),
         "longitude": round(random.uniform(11.32, 11.37), 6),
-        "speed": round(random.uniform(0, 90), 1),
+        "speed": speed,
         "engine_on": True,
-        "engine_temperature": round(random.uniform(70, 100), 1),
+        "engine_temperature": engine_temperature,
         "fuel_level": round(random.uniform(20, 100), 1),
         "passengers": random.randint(0, 80)
     }
