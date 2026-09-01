@@ -1,4 +1,5 @@
 import json
+import os
 import psycopg2
 
 from alert_logic import check_alerts
@@ -150,6 +151,10 @@ def main():
     # --------------------------------------------------
 
     env = StreamExecutionEnvironment.get_execution_environment()
+
+    env.add_python_file(
+        os.path.join(os.path.dirname(__file__), "alert_logic.py")
+    )
 
     # --------------------------------------------------
     # KAFKA SOURCE
