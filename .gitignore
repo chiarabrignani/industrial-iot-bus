@@ -18,3 +18,7 @@ Thumbs.db
 # File temporanei
 *.log
 *.tmp
+
+# Coverage
+.coverage
+htmlcov/

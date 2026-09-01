@@ -90,8 +90,25 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/dashboards:/var/lib/grafana/dashboards
       - ./grafana/provisioning:/etc/grafana/provisioning
-
-
+    
+  integration-tests:
+    image: python:3.12-slim
+    container_name: integration-tests
+    depends_on:
+      - kafka
+      - postgres
+      - jobmanager
+    environment:
+      KAFKA_BROKER: kafka:9092
+      POSTGRES_HOST: postgres
+    volumes:
+      - ./tests:/tests
+    working_dir: /tests
+    command: >
+      bash -c
+      "pip install -q pytest kafka-python psycopg2-binary
+      && pytest -q test_integration.py"
+    
 volumes:
   postgres_data:
   grafana_data:
