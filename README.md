@@ -91,9 +91,9 @@ Bus Simulator
       ↓
     MQTT
       ↓
- Mosquitto
+  Mosquitto
       ↓
- MQTT-Kafka Bridge
+  MQTT-Kafka Bridge
       ↓
     Kafka
       ↓
@@ -273,6 +273,10 @@ industrial-iot-bus/
 ├── docker-compose.yml
 ├── .gitignore
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
 ├── bridge/
 │   ├── Dockerfile
 │   ├── bridge.py
@@ -296,7 +300,8 @@ industrial-iot-bus/
 │   └── requirements.txt
 │
 └── tests/
-    └── test_telemetry_job.py
+    ├── test_telemetry_job.py
+    └── test_integration.py
 ```
 
 La configurazione e i dati persistenti di Grafana vengono conservati nel volume Docker:
@@ -581,16 +586,16 @@ bus-telemetry
 
 La logica degli alert è stata separata dal job Flink per poter essere verificata tramite test automatici.
 
-I test si trovano in:
+I test unitari si trovano in:
 
 ```text
 tests/test_telemetry_job.py
 ```
 
-Per eseguire i test:
+Per eseguire i test unitari:
 
 ```bash
-pytest
+pytest -q tests/test_telemetry_job.py
 ```
 
 Sono stati implementati cinque test:
@@ -601,25 +606,130 @@ Sono stati implementati cinque test:
 4. una telemetria che supera entrambe le soglie genera due alert;
 5. valori esattamente uguali alle soglie non generano alert.
 
-L'esecuzione ha prodotto:
+L'esecuzione verificata ha prodotto:
 
 ```text
-collected 5 items
-
-tests/test_telemetry_job.py ..... [100%]
-
-5 passed
+5 passed in 0.06s
 ```
 
-È stata inoltre verificata la correttezza sintattica del job tramite:
+È stata inoltre verificata la correttezza sintattica dei file Python tramite:
 
 ```bash
+python -m py_compile flink/jobs/alert_logic.py
 python -m py_compile flink/jobs/telemetry_job.py
+python -m py_compile simulator/bus_simulator.py
+python -m py_compile bridge/bridge.py
 ```
 
 ---
 
-## 13. Test end-to-end degli alert
+## 13. Test di integrazione
+
+Il progetto include un test di integrazione che verifica il collegamento tra **Kafka, Flink e PostgreSQL**.
+
+Il test si trova in:
+
+```text
+tests/test_integration.py
+```
+
+Il test:
+
+1. genera una telemetria anomala con un identificativo univoco;
+2. pubblica la telemetria sul topic Kafka `bus-telemetry`;
+3. attende che Flink elabori il messaggio;
+4. verifica che la telemetria sia stata salvata in PostgreSQL;
+5. verifica che siano stati generati gli alert `OVERSPEED` e `ENGINE_OVERHEATING`.
+
+Il test può essere eseguito tramite il servizio Docker dedicato:
+
+```bash
+docker compose run --rm integration-tests
+```
+
+L'esecuzione verificata ha prodotto:
+
+```text
+1 passed in 2.38s
+```
+
+Il test verifica quindi il seguente percorso:
+
+```text
+Kafka
+  ↓
+Flink
+  ↓
+PostgreSQL
+  ↓
+Verifica automatica
+```
+
+---
+
+## 14. Coverage dei test
+
+La copertura della logica di generazione degli alert viene misurata tramite `pytest-cov`.
+
+Il comando utilizzato è:
+
+```bash
+pytest --cov=alert_logic \
+       --cov-report=term-missing \
+       -q tests/test_telemetry_job.py
+```
+
+La verifica ha prodotto:
+
+```text
+Name                        Stmts   Miss  Cover
+------------------------------------------------
+flink/jobs/alert_logic.py       7      0   100%
+------------------------------------------------
+TOTAL                           7      0   100%
+
+5 passed
+```
+
+La logica contenuta in `flink/jobs/alert_logic.py` risulta quindi coperta al **100%** dai test unitari.
+
+---
+
+## 15. CI/CD con GitHub Actions
+
+Il progetto utilizza **GitHub Actions** per l'integrazione continua.
+
+La pipeline è definita nel file:
+
+```text
+.github/workflows/ci.yml
+```
+
+La pipeline viene eseguita automaticamente:
+
+* quando viene effettuato un `push` sul branch `master`;
+* quando viene aperta o aggiornata una `pull request` verso `master`.
+
+La pipeline attuale esegue:
+
+1. checkout del repository;
+2. configurazione dell'ambiente Python;
+3. installazione delle dipendenze di test;
+4. verifica della sintassi dei file Python;
+5. esecuzione dei test unitari;
+6. misurazione della coverage.
+
+L'esecuzione della pipeline è stata verificata con successo tramite GitHub Actions, con job `test` terminato con esito positivo.
+
+Il test di integrazione è inoltre disponibile come servizio Docker e può essere eseguito localmente con:
+
+```bash
+docker compose run --rm integration-tests
+```
+
+---
+
+## 16. Test end-to-end degli alert
 
 È stato eseguito un test completo inviando manualmente una telemetria anomala sul topic Kafka `bus-telemetry`.
 
@@ -677,7 +787,7 @@ PostgreSQL Kafka
 
 ---
 
-## 14. Test della dashboard Grafana
+## 17. Test della dashboard Grafana
 
 La connessione tra Grafana e PostgreSQL è stata verificata con successo tramite:
 
@@ -705,7 +815,7 @@ Il refresh della dashboard è impostato a:
 
 ---
 
-## 15. Gestione dei duplicati
+## 18. Gestione dei duplicati
 
 La tabella `telemetry` utilizza `event_id` come chiave primaria.
 
@@ -721,7 +831,7 @@ La tabella `alerts` non utilizza attualmente lo stesso meccanismo, perché una s
 
 ---
 
-## 16. Arresto del progetto
+## 19. Arresto del progetto
 
 Per fermare i container senza rimuoverli:
 
@@ -758,7 +868,7 @@ Per mantenere i dati PostgreSQL e la configurazione persistente di Grafana, evit
 
 ---
 
-## 17. Stato attuale
+## 20. Stato attuale
 
 Attualmente sono implementati e verificati:
 
@@ -770,6 +880,7 @@ Attualmente sono implementati e verificati:
 * [x] Elaborazione con Apache Flink
 * [x] Rilevamento `OVERSPEED`
 * [x] Rilevamento `ENGINE_OVERHEATING`
+* [x] Generazione automatica di anomalie nel simulatore
 * [x] Topic Kafka `bus-alerts`
 * [x] Database PostgreSQL
 * [x] Salvataggio delle telemetrie
@@ -777,14 +888,18 @@ Attualmente sono implementati e verificati:
 * [x] Gestione dei duplicati delle telemetrie
 * [x] Separazione della logica degli alert
 * [x] Test automatici della logica degli alert
-* [x] 5 test automatici superati
+* [x] 5 test unitari superati
+* [x] Test di integrazione Kafka → Flink → PostgreSQL
 * [x] Test end-to-end della pipeline
+* [x] Coverage della logica degli alert al 100%
+* [x] Pipeline CI tramite GitHub Actions
 * [x] Dashboard Grafana
 * [x] Collegamento Grafana → PostgreSQL
 * [x] Aggiornamento automatico della dashboard
 * [x] Visualizzazione delle telemetrie
 * [x] Visualizzazione degli alert
 * [x] Query SQL per statistiche sulla flotta
+* [x] Deployment dei componenti tramite Docker Compose
 
 ### Sviluppi successivi
 
@@ -797,4 +912,5 @@ Possibili estensioni del progetto:
 * configurazione automatica dell'avvio del job Flink;
 * aggiunta di ulteriori metriche operative;
 * eventuale persistenza/versionamento della configurazione della dashboard Grafana.
+
 
