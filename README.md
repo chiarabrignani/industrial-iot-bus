@@ -697,7 +697,7 @@ La logica contenuta in `flink/jobs/alert_logic.py` risulta quindi coperta al **1
 
 ## 15. CI/CD con GitHub Actions
 
-Il progetto utilizza **GitHub Actions** per l'integrazione continua.
+Il progetto utilizza **GitHub Actions** per automatizzare le verifiche del codice e la preparazione dell'ambiente containerizzato.
 
 La pipeline è definita nel file:
 
@@ -710,7 +710,9 @@ La pipeline viene eseguita automaticamente:
 * quando viene effettuato un `push` sul branch `master`;
 * quando viene aperta o aggiornata una `pull request` verso `master`.
 
-La pipeline attuale esegue:
+La pipeline è organizzata in due job principali.
+
+Il job `test` esegue le attività di **Continuous Integration**:
 
 1. checkout del repository;
 2. configurazione dell'ambiente Python;
@@ -719,13 +721,22 @@ La pipeline attuale esegue:
 5. esecuzione dei test unitari;
 6. misurazione della coverage.
 
-L'esecuzione della pipeline è stata verificata con successo tramite GitHub Actions, con job `test` terminato con esito positivo.
+Se il job `test` termina con successo, viene eseguito il job `docker`, che verifica la configurazione di Docker Compose e costruisce le immagini Docker del progetto:
+
+1. verifica della configurazione tramite `docker compose config -q`;
+2. build delle immagini tramite `docker compose build`.
+
+La dipendenza tra i due job garantisce quindi che la fase Docker venga eseguita solo dopo il superamento dei test.
+
+L'esecuzione della pipeline è stata verificata con successo tramite GitHub Actions, con entrambi i job `test` e `docker` terminati con esito positivo.
 
 Il test di integrazione è inoltre disponibile come servizio Docker e può essere eseguito localmente con:
 
 ```bash
 docker compose run --rm integration-tests
 ```
+
+Il deployment e l'avvio dell'intera piattaforma vengono gestiti tramite Docker Compose, che permette di eseguire i diversi componenti in container.
 
 ---
 
@@ -892,7 +903,7 @@ Attualmente sono implementati e verificati:
 * [x] Test di integrazione Kafka → Flink → PostgreSQL
 * [x] Test end-to-end della pipeline
 * [x] Coverage della logica degli alert al 100%
-* [x] Pipeline CI tramite GitHub Actions
+* [x] Pipeline CI/CD tramite GitHub Actions
 * [x] Dashboard Grafana
 * [x] Collegamento Grafana → PostgreSQL
 * [x] Aggiornamento automatico della dashboard
