@@ -127,7 +127,7 @@ class TelemetryProcessor(ProcessFunction):
             print(
                   f"Errore nell'elaborazione del messaggio: {e}"
             )
-        self.connection.rollback()
+            self.connection.rollback()
 
     def close(self):
         """

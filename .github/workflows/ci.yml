@@ -35,8 +35,9 @@ jobs:
       - name: Esegui test unitari e coverage
         run: |
           pytest --cov=alert_logic \
+                 --cov=telemetry_job \
                  --cov-report=term-missing \
-                 -q tests/test_telemetry_job.py
+                 -q tests/test_alert_logic.py tests/test_telemetry_job.py
 
   docker:
     runs-on: ubuntu-latest
