@@ -643,23 +643,33 @@ Tutti i controlli sintattici sono stati superati.
 
 ## 13. Test di integrazione
 
-Il progetto include un test di integrazione che verifica il collegamento tra **Kafka, Flink e PostgreSQL**.
+Il progetto include quattro test di integrazione che verificano il corretto funzionamento della pipeline tra **Kafka, Flink e PostgreSQL**.
 
-Il test si trova in:
+I test si trovano in:
 
 ```text
 tests/test_integration.py
 ```
 
-Il test:
+Sono stati implementati quattro scenari:
 
-1. genera una telemetria anomala con un identificativo univoco;
+1. **telemetria normale**: verifica che una telemetria con valori normali venga salvata in PostgreSQL senza generare alert;
+2. **OVERSPEED**: verifica che una velocità superiore alla soglia generi solamente l'alert `OVERSPEED`;
+3. **ENGINE_OVERHEATING**: verifica che una temperatura del motore superiore alla soglia generi solamente l'alert `ENGINE_OVERHEATING`;
+4. **due alert**: verifica che il superamento contemporaneo delle due soglie generi entrambi gli alert.
+
+Ogni scenario:
+
+1. genera una telemetria di test con un identificativo univoco;
 2. pubblica la telemetria sul topic Kafka `bus-telemetry`;
 3. attende che Flink elabori il messaggio;
 4. verifica che la telemetria sia stata salvata in PostgreSQL;
-5. verifica che siano stati generati gli alert `OVERSPEED` e `ENGINE_OVERHEATING`.
+5. verifica che gli alert presenti siano esattamente quelli attesi;
+6. elimina i dati creati dal test.
 
-Il test può essere eseguito tramite il servizio Docker dedicato:
+Il controllo degli alert utilizza un confronto esatto tra gli alert rilevati e quelli attesi. In questo modo il test fallisce anche nel caso in cui venga generato un alert aggiuntivo non previsto.
+
+I test possono essere eseguiti tramite il servizio Docker dedicato:
 
 ```bash
 docker compose run --rm integration-tests
@@ -668,10 +678,38 @@ docker compose run --rm integration-tests
 L'esecuzione verificata ha prodotto:
 
 ```text
-1 passed
+4 passed, 4 warnings in 6.68s
 ```
 
-Il test verifica quindi il seguente percorso:
+I quattro test di integrazione verificano quindi i seguenti scenari:
+
+```text
+Telemetria normale
+    ↓
+Kafka → Flink → PostgreSQL
+    ↓
+Nessun alert
+
+OVERSPEED
+    ↓
+Kafka → Flink → PostgreSQL
+    ↓
+OVERSPEED
+
+ENGINE_OVERHEATING
+    ↓
+Kafka → Flink → PostgreSQL
+    ↓
+ENGINE_OVERHEATING
+
+Due anomalie contemporanee
+    ↓
+Kafka → Flink → PostgreSQL
+    ↓
+OVERSPEED + ENGINE_OVERHEATING
+```
+
+Nel complesso, i test verificano il seguente percorso della pipeline:
 
 ```text
 Kafka
@@ -682,6 +720,8 @@ PostgreSQL
   ↓
 Verifica automatica
 ```
+
+I dati creati dai test vengono inoltre eliminati al termine di ogni esecuzione, evitando di modificare permanentemente i dati utilizzati dal resto della piattaforma.
 
 ---
 
@@ -925,7 +965,7 @@ Attualmente sono implementati e verificati:
 * [x] Separazione della logica degli alert
 * [x] Test automatici della logica degli alert
 * [x] 14 test unitari superati
-* [x] Test di integrazione Kafka → Flink → PostgreSQL
+* [x] 4 test di integrazione Kafka → Flink → PostgreSQL
 * [x] Test end-to-end della pipeline
 * [x] Coverage di `alert_logic.py` al 100%
 * [x] Coverage di `telemetry_job.py` all'81%
