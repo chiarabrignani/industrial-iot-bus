@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 import psycopg2
-from kafka import KafkaProducer
+from kafka import KafkaConsumer, KafkaProducer
 
 
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
@@ -47,6 +47,55 @@ def send_telemetry(telemetry):
     producer.send(KAFKA_TOPIC, telemetry)
     producer.flush()
     producer.close()
+
+
+def create_alert_consumer():
+    """
+    Crea un consumer Kafka dedicato al topic bus-alerts.
+    """
+
+    consumer = KafkaConsumer(
+        "bus-alerts",
+        bootstrap_servers=KAFKA_BROKER,
+        auto_offset_reset="latest",
+        enable_auto_commit=False,
+        group_id=f"integration-test-{uuid.uuid4()}",
+        value_deserializer=lambda value: json.loads(
+            value.decode("utf-8")
+        )
+    )
+
+    # Attende l'assegnazione della partizione.
+    consumer.poll(timeout_ms=1000)
+
+    return consumer
+
+
+def check_alert_in_kafka(consumer, telemetry, expected_alert_type):
+    """
+    Verifica che Flink pubblichi l'alert atteso
+    sul topic Kafka bus-alerts.
+    """
+
+    event_id = telemetry["event_id"]
+
+    for _ in range(20):
+        messages = consumer.poll(timeout_ms=1000)
+
+        for records in messages.values():
+            for message in records:
+                alert = message.value
+
+                if (
+                    alert.get("event_id") == event_id
+                    and alert.get("alert_type") == expected_alert_type
+                ):
+                    return
+
+    raise AssertionError(
+        f"Alert {expected_alert_type} non trovato "
+        f"nel topic bus-alerts per l'evento {event_id}"
+    )
 
 
 def check_result(telemetry, expected_alerts):
@@ -205,3 +254,28 @@ def test_pipeline_due_alert():
             "ENGINE_OVERHEATING"
         }
     )
+
+
+def test_pipeline_pubblica_alert_su_kafka():
+    """
+    Verifica che Flink pubblichi un alert sul topic Kafka bus-alerts.
+    """
+
+    telemetry = create_telemetry(
+        speed=120.0,
+        engine_temperature=80.0
+    )
+
+    consumer = create_alert_consumer()
+
+    try:
+        send_telemetry(telemetry)
+
+        check_alert_in_kafka(
+            consumer,
+            telemetry,
+            expected_alert_type="OVERSPEED"
+        )
+
+    finally:
+        consumer.close()
