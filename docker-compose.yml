@@ -98,15 +98,17 @@ services:
       - kafka
       - postgres
       - jobmanager
+      - mosquitto
     environment:
       KAFKA_BROKER: kafka:9092
       POSTGRES_HOST: postgres
+      MQTT_BROKER: mosquitto
     volumes:
       - ./tests:/tests
     working_dir: /tests
     command: >
       bash -c
-      "pip install -q pytest kafka-python psycopg2-binary
+      "pip install -q pytest kafka-python psycopg2-binary paho-mqtt
       && pytest -q test_integration.py"
     
 volumes:

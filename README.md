@@ -643,7 +643,7 @@ Tutti i controlli sintattici sono stati superati.
 
 ## 13. Test di integrazione
 
-Il progetto include cinque test di integrazione che verificano il corretto funzionamento della pipeline tra **Kafka, Flink e PostgreSQL**, oltre alla pubblicazione degli alert sul topic Kafka `bus-alerts`.
+Il progetto include sei test di integrazione che verificano il corretto funzionamento dei principali collegamenti tra i componenti della pipeline, coinvolgendo **MQTT, Bridge, Kafka, Flink e PostgreSQL**, oltre alla pubblicazione degli alert sul topic Kafka `bus-alerts`.
 
 I test si trovano in:
 
@@ -651,26 +651,29 @@ I test si trovano in:
 tests/test_integration.py
 ```
 
-Sono stati implementati cinque scenari:
+Sono stati implementati sei scenari:
 
 1. **telemetria normale**: verifica che una telemetria con valori normali venga salvata in PostgreSQL senza generare alert;
 2. **OVERSPEED**: verifica che una velocità superiore alla soglia generi solamente l'alert `OVERSPEED`;
 3. **ENGINE_OVERHEATING**: verifica che una temperatura del motore superiore alla soglia generi solamente l'alert `ENGINE_OVERHEATING`;
 4. **due alert**: verifica che il superamento contemporaneo delle due soglie generi entrambi gli alert;
-5. **pubblicazione su Kafka**: verifica che Flink pubblichi correttamente l'alert generato sul topic Kafka `bus-alerts`.
+5. **pubblicazione su Kafka**: verifica che Flink pubblichi correttamente l'alert generato sul topic Kafka `bus-alerts`;
+6. **MQTT → Bridge → Kafka**: verifica che una telemetria pubblicata tramite MQTT venga ricevuta dal Bridge e successivamente pubblicata sul topic Kafka `bus-telemetry`.
 
-Ogni scenario relativo alla verifica di PostgreSQL:
+I primi quattro scenari relativi alla verifica di PostgreSQL:
 
-1. genera una telemetria di test con un identificativo univoco;
-2. pubblica la telemetria sul topic Kafka `bus-telemetry`;
-3. attende che Flink elabori il messaggio;
-4. verifica che la telemetria sia stata salvata in PostgreSQL;
-5. verifica che gli alert presenti siano esattamente quelli attesi;
-6. elimina i dati creati dal test.
+1. generano una telemetria di test con un identificativo univoco;
+2. pubblicano la telemetria sul topic Kafka `bus-telemetry`;
+3. attendono che Flink elabori il messaggio;
+4. verificano che la telemetria sia stata salvata in PostgreSQL;
+5. verificano che gli alert presenti siano esattamente quelli attesi;
+6. eliminano i dati creati dal test.
 
 Il controllo degli alert in PostgreSQL utilizza un confronto esatto tra gli alert rilevati e quelli attesi. In questo modo il test fallisce anche nel caso in cui venga generato un alert aggiuntivo non previsto.
 
 Il quinto test verifica invece il ramo di uscita degli alert da Flink verso Kafka. Una telemetria con velocità superiore alla soglia viene inviata sul topic `bus-telemetry`; il test verifica quindi che Flink generi l'alert `OVERSPEED` e lo pubblichi sul topic `bus-alerts`. La verifica utilizza l'`event_id` della telemetria per assicurarsi che l'alert ricevuto corrisponda esattamente all'evento generato dal test.
+
+Il sesto test verifica il collegamento tra **MQTT, Bridge e Kafka**. Una telemetria di test viene pubblicata sul topic MQTT `bus/BUS_INTEGRATION_TEST/telemetry`; il test attende quindi che il Bridge trasferisca il messaggio sul topic Kafka `bus-telemetry`. La verifica utilizza l'`event_id` per individuare il messaggio corretto e confronta l'intera telemetria ricevuta con quella originariamente pubblicata, verificando che il contenuto sia rimasto invariato.
 
 I test possono essere eseguiti tramite il servizio Docker dedicato:
 
@@ -681,10 +684,10 @@ docker compose run --rm integration-tests
 L'esecuzione verificata ha prodotto:
 
 ```text
-5 passed, 6 warnings in 8.67s
+6 passed, 8 warnings in 10.46s
 ```
 
-I cinque test di integrazione verificano quindi i seguenti scenari:
+I sei test di integrazione verificano quindi i seguenti scenari:
 
 ```text
 Telemetria normale
@@ -716,19 +719,38 @@ Pubblicazione alert
 Kafka bus-telemetry → Flink → Kafka bus-alerts
     ↓
 OVERSPEED
+
+MQTT → Bridge → Kafka
+    ↓
+MQTT → Bridge → Kafka bus-telemetry
+    ↓
+Telemetria ricevuta correttamente
 ```
 
-Nel complesso, i test verificano entrambi i rami principali di output di Flink:
+Nel complesso, i test verificano i principali collegamenti tra i componenti della pipeline:
 
 ```text
-                         ┌──→ PostgreSQL
-                         │
-Kafka bus-telemetry → Flink
-                         │
-                         └──→ Kafka bus-alerts
+MQTT
+  ↓
+Bridge
+  ↓
+Kafka bus-telemetry
+  ↓
+Flink
+ ↙   ↘
+↓     ↓
+PostgreSQL   Kafka bus-alerts
 ```
 
-I dati creati dai test vengono inoltre eliminati al termine di ogni esecuzione, evitando di modificare permanentemente i dati utilizzati dal resto della piattaforma.
+In particolare, vengono verificati automaticamente i collegamenti:
+
+```text
+MQTT → Bridge → Kafka
+Kafka → Flink → PostgreSQL
+Kafka → Flink → Kafka bus-alerts
+```
+
+I dati creati dai test vengono inoltre eliminati al termine delle verifiche che utilizzano PostgreSQL, evitando di modificare permanentemente i dati utilizzati dal resto della piattaforma.
 
 ---
 
@@ -972,7 +994,7 @@ Attualmente sono implementati e verificati:
 * [x] Separazione della logica degli alert
 * [x] Test automatici della logica degli alert
 * [x] 14 test unitari superati
-* [x] 5 test di integrazione Kafka → Flink → PostgreSQL e Kafka `bus-alerts`
+* [x] 6 test di integrazione MQTT → Bridge → Kafka e Kafka → Flink → PostgreSQL/Kafka `bus-alerts`
 * [x] Test end-to-end della pipeline
 * [x] Coverage di `alert_logic.py` al 100%
 * [x] Coverage di `telemetry_job.py` all'81%

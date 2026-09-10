@@ -6,10 +6,15 @@ from datetime import datetime, timezone
 
 import psycopg2
 from kafka import KafkaConsumer, KafkaProducer
+import paho.mqtt.client as mqtt
 
 
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC = "bus-telemetry"
+
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = 1883
+MQTT_TOPIC = "bus/BUS_INTEGRATION_TEST/telemetry"
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
 POSTGRES_PORT = 5432
@@ -47,6 +52,29 @@ def send_telemetry(telemetry):
     producer.send(KAFKA_TOPIC, telemetry)
     producer.flush()
     producer.close()
+
+
+def send_telemetry_mqtt(telemetry):
+    """
+    Pubblica una telemetria sul topic MQTT.
+    """
+
+    client = mqtt.Client()
+
+    try:
+        client.connect(MQTT_BROKER, MQTT_PORT)
+
+        result = client.publish(
+            MQTT_TOPIC,
+            json.dumps(telemetry)
+        )
+
+        result.wait_for_publish()
+
+        assert result.rc == mqtt.MQTT_ERR_SUCCESS
+
+    finally:
+        client.disconnect()
 
 
 def create_alert_consumer():
@@ -96,6 +124,53 @@ def check_alert_in_kafka(consumer, telemetry, expected_alert_type):
         f"Alert {expected_alert_type} non trovato "
         f"nel topic bus-alerts per l'evento {event_id}"
     )
+
+
+def check_telemetry_in_kafka(consumer, telemetry):
+    """
+    Verifica che la telemetria pubblicata su MQTT
+    venga trasferita dal Bridge al topic Kafka bus-telemetry.
+    """
+
+    event_id = telemetry["event_id"]
+
+    for _ in range(20):
+        messages = consumer.poll(timeout_ms=1000)
+
+        for records in messages.values():
+            for message in records:
+                received_telemetry = message.value
+
+                if received_telemetry.get("event_id") == event_id:
+                    assert received_telemetry == telemetry
+                    return
+
+    raise AssertionError(
+        f"Telemetria non trovata nel topic {KAFKA_TOPIC} "
+        f"per l'evento {event_id}"
+    )
+
+
+def create_telemetry_consumer():
+    """
+    Crea un consumer Kafka dedicato al topic bus-telemetry.
+    """
+
+    consumer = KafkaConsumer(
+        KAFKA_TOPIC,
+        bootstrap_servers=KAFKA_BROKER,
+        auto_offset_reset="latest",
+        enable_auto_commit=False,
+        group_id=f"integration-test-{uuid.uuid4()}",
+        value_deserializer=lambda value: json.loads(
+            value.decode("utf-8")
+        )
+    )
+
+    # Attende l'assegnazione della partizione.
+    consumer.poll(timeout_ms=1000)
+
+    return consumer
 
 
 def check_result(telemetry, expected_alerts):
@@ -275,6 +350,31 @@ def test_pipeline_pubblica_alert_su_kafka():
             consumer,
             telemetry,
             expected_alert_type="OVERSPEED"
+        )
+
+    finally:
+        consumer.close()
+
+
+def test_pipeline_mqtt_bridge_kafka():
+    """
+    Verifica il trasferimento di una telemetria
+    da MQTT a Kafka tramite il Bridge.
+    """
+
+    telemetry = create_telemetry(
+        speed=60.0,
+        engine_temperature=80.0
+    )
+
+    consumer = create_telemetry_consumer()
+
+    try:
+        send_telemetry_mqtt(telemetry)
+
+        check_telemetry_in_kafka(
+            consumer,
+            telemetry
         )
 
     finally:
