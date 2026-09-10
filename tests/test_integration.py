@@ -40,9 +40,9 @@ def test_pipeline_kafka_flink_postgres():
 
     # Pubblica la telemetria su Kafka
     producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BROKER,
-    request_timeout_ms=10000,
-    value_serializer=lambda value: json.dumps(value).encode("utf-8")
+        bootstrap_servers=KAFKA_BROKER,
+        request_timeout_ms=10000,
+        value_serializer=lambda value: json.dumps(value).encode("utf-8")
     )
 
     producer.send(KAFKA_TOPIC, telemetry)
