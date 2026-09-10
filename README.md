@@ -791,46 +791,82 @@ La coverage complessiva dei moduli analizzati è pari all'83%.
 
 ## 15. CI/CD con GitHub Actions
 
-Il progetto utilizza **GitHub Actions** per automatizzare le verifiche del codice e la preparazione dell'ambiente containerizzato.
+Il progetto utilizza **GitHub Actions** per automatizzare le attività di **Continuous Integration (CI)** e **Continuous Delivery (CD)**.
 
 La pipeline è definita nel file:
 
-```text
-.github/workflows/ci.yml
-```
+    .github/workflows/ci.yml
 
 La pipeline viene eseguita automaticamente:
 
 * quando viene effettuato un `push` sul branch `master`;
 * quando viene aperta o aggiornata una `pull request` verso `master`.
 
-La pipeline è organizzata in due job principali.
+La pipeline è organizzata in due job principali, eseguiti in sequenza.
+
+### Continuous Integration
 
 Il job `test` esegue le attività di **Continuous Integration**:
 
 1. checkout del repository;
 2. configurazione dell'ambiente Python;
 3. installazione delle dipendenze di test;
-4. verifica della sintassi dei file Python;
+4. verifica della sintassi dei principali file Python;
 5. esecuzione dei test unitari;
 6. misurazione della coverage.
 
-Se il job `test` termina con successo, viene eseguito il job `docker`, che verifica la configurazione di Docker Compose e costruisce le immagini Docker del progetto:
+Se il job `test` termina con successo, viene eseguito il job `docker`.
+
+### Continuous Delivery
+
+Il job `docker` realizza la fase di **Continuous Delivery**, preparando una versione containerizzata verificata e pronta per il deployment.
+
+Le attività svolte sono:
 
 1. verifica della configurazione tramite `docker compose config -q`;
-2. build delle immagini tramite `docker compose build`.
+2. build delle immagini tramite `docker compose build`;
+3. salvataggio delle immagini Docker in un archivio `docker-images.tar`;
+4. creazione di un artefatto GitHub Actions denominato `deployment-bundle`.
 
-La dipendenza tra i due job garantisce quindi che la fase Docker venga eseguita solo dopo il superamento dei test.
+L'artefatto prodotto contiene:
 
-L'esecuzione della pipeline è stata verificata con successo tramite GitHub Actions, con entrambi i job `test` e `docker` terminati con esito positivo.
+    deployment-bundle
+    ├── docker-images.tar
+    └── docker-compose.yml
+
+In questo modo, una modifica al progetto viene prima verificata automaticamente tramite test e coverage e, se tutti i controlli hanno esito positivo, viene prodotta una versione containerizzata del sistema pronta per essere distribuita.
+
+La dipendenza tra i due job è definita tramite:
+
+    needs: test
+
+garantendo che la fase di Continuous Delivery venga eseguita solo dopo il superamento dei test.
+
+Il flusso complessivo della pipeline è quindi:
+
+    git push / Pull Request
+            ↓
+       GitHub Actions
+            ↓
+      Test + Coverage
+            ↓
+    Docker Compose Config
+            ↓
+        Docker Build
+            ↓
+     Salvataggio immagini
+            ↓
+    deployment-bundle
+
+L'esecuzione della pipeline è stata verificata con successo tramite GitHub Actions, con i job `test` e `docker` completati correttamente.
+
+Il progetto implementa quindi **Continuous Integration e Continuous Delivery**. Il **Continuous Deployment automatico** su un ambiente esterno non è attualmente incluso: il deployment della piattaforma viene effettuato tramite Docker Compose nell'ambiente di esecuzione.
 
 Il test di integrazione è inoltre disponibile come servizio Docker e può essere eseguito localmente con:
 
-```bash
-docker compose run --rm integration-tests
-```
+    docker compose run --rm integration-tests
 
-Il deployment e l'avvio dell'intera piattaforma vengono gestiti tramite Docker Compose, che permette di eseguire i diversi componenti in container.
+Il deployment dei componenti dell'applicazione viene gestito tramite Docker Compose, che permette di eseguire i diversi componenti della piattaforma in container.
 
 ---
 
@@ -1000,6 +1036,7 @@ Attualmente sono implementati e verificati:
 * [x] Coverage di `telemetry_job.py` all'81%
 * [x] Coverage complessiva dei moduli analizzati all'83%
 * [x] Pipeline CI/CD tramite GitHub Actions
+* [x] Continuous Delivery con build e artefatto Docker
 * [x] Dashboard Grafana
 * [x] Collegamento Grafana → PostgreSQL
 * [x] Aggiornamento automatico della dashboard
