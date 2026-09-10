@@ -107,13 +107,13 @@ Bus Simulator
 Gli alert seguono inoltre il percorso:
 
 ```text
-Flink
-  ↓
-PostgreSQL (alerts)
-  ↓
-Kafka (bus-alerts)
-  ↓
-Grafana
+             Flink
+            /     \
+           ↓       ↓
+PostgreSQL        Kafka
+  (alerts)     (bus-alerts)
+     ↓
+  Grafana
 ```
 
 ---
@@ -300,6 +300,7 @@ industrial-iot-bus/
 │   └── requirements.txt
 │
 └── tests/
+    ├── test_alert_logic.py
     ├── test_telemetry_job.py
     └── test_integration.py
 ```
@@ -586,33 +587,48 @@ bus-telemetry
 
 La logica degli alert è stata separata dal job Flink per poter essere verificata tramite test automatici.
 
-I test unitari si trovano in:
+I test unitari sono organizzati in due file:
 
 ```text
+tests/test_alert_logic.py
 tests/test_telemetry_job.py
 ```
+
+Il file `test_alert_logic.py` contiene 8 test dedicati alla funzione `check_alerts()`, verificando i principali casi di funzionamento:
+
+1. telemetria normale;
+2. superamento della soglia di velocità;
+3. superamento della soglia di temperatura;
+4. presenza contemporanea delle due anomalie;
+5. valori esattamente uguali alle soglie;
+6. superamento della soglia di velocità di poco;
+7. superamento della soglia di temperatura di poco;
+8. correttezza completa del dizionario di alert prodotto.
+
+Il file `test_telemetry_job.py` contiene invece 6 test dedicati al componente `TelemetryProcessor`. Vengono verificati:
+
+1. apertura della connessione PostgreSQL;
+2. inserimento di una telemetria;
+3. inserimento di un alert;
+4. elaborazione di una telemetria anomala e generazione degli alert;
+5. gestione degli errori tramite `rollback()`;
+6. chiusura della connessione e del cursor.
+
+I test utilizzano dei mock per isolare il codice dalle dipendenze esterne, evitando di dover avviare realmente Flink o collegarsi a PostgreSQL durante gli unit test.
 
 Per eseguire i test unitari:
 
 ```bash
-pytest -q tests/test_telemetry_job.py
+python -m pytest -q tests/test_alert_logic.py tests/test_telemetry_job.py
 ```
-
-Sono stati implementati cinque test:
-
-1. una telemetria normale non genera alert;
-2. una velocità superiore alla soglia genera `OVERSPEED`;
-3. una temperatura superiore alla soglia genera `ENGINE_OVERHEATING`;
-4. una telemetria che supera entrambe le soglie genera due alert;
-5. valori esattamente uguali alle soglie non generano alert.
 
 L'esecuzione verificata ha prodotto:
 
 ```text
-5 passed in 0.06s
+14 passed
 ```
 
-È stata inoltre verificata la correttezza sintattica dei file Python tramite:
+È stata inoltre verificata la correttezza sintattica dei principali file Python tramite:
 
 ```bash
 python -m py_compile flink/jobs/alert_logic.py
@@ -620,6 +636,8 @@ python -m py_compile flink/jobs/telemetry_job.py
 python -m py_compile simulator/bus_simulator.py
 python -m py_compile bridge/bridge.py
 ```
+
+Tutti i controlli sintattici sono stati superati.
 
 ---
 
@@ -650,7 +668,7 @@ docker compose run --rm integration-tests
 L'esecuzione verificata ha prodotto:
 
 ```text
-1 passed in 2.38s
+1 passed
 ```
 
 Il test verifica quindi il seguente percorso:
@@ -669,29 +687,36 @@ Verifica automatica
 
 ## 14. Coverage dei test
 
-La copertura della logica di generazione degli alert viene misurata tramite `pytest-cov`.
+La copertura del codice viene misurata tramite `pytest-cov`.
 
 Il comando utilizzato è:
 
 ```bash
-pytest --cov=alert_logic \
-       --cov-report=term-missing \
-       -q tests/test_telemetry_job.py
+python -m pytest \
+    --cov=alert_logic \
+    --cov=telemetry_job \
+    --cov-report=term-missing \
+    -q tests/test_alert_logic.py tests/test_telemetry_job.py
 ```
 
-La verifica ha prodotto:
+L'esecuzione verificata ha prodotto:
 
 ```text
-Name                        Stmts   Miss  Cover
-------------------------------------------------
-flink/jobs/alert_logic.py       7      0   100%
-------------------------------------------------
-TOTAL                           7      0   100%
+Name                          Stmts   Miss  Cover   Missing
+-----------------------------------------------------------
+flink/jobs/alert_logic.py         7      0   100%
+flink/jobs/telemetry_job.py      47      9    81%   153-206, 210
+-----------------------------------------------------------
+TOTAL                            54      9    83%
 
-5 passed
+14 passed
 ```
 
-La logica contenuta in `flink/jobs/alert_logic.py` risulta quindi coperta al **100%** dai test unitari.
+La funzione `check_alerts()`, contenuta in `alert_logic.py`, risulta quindi coperta al 100%.
+
+Il modulo `telemetry_job.py` raggiunge invece una coverage dell'81%. Le istruzioni non coperte riguardano principalmente la funzione `main()`, che contiene la configurazione della pipeline Flink e viene verificata a livello di integrazione anziché tramite unit test.
+
+La coverage complessiva dei moduli analizzati è pari all'83%.
 
 ---
 
@@ -899,10 +924,12 @@ Attualmente sono implementati e verificati:
 * [x] Gestione dei duplicati delle telemetrie
 * [x] Separazione della logica degli alert
 * [x] Test automatici della logica degli alert
-* [x] 5 test unitari superati
+* [x] 14 test unitari superati
 * [x] Test di integrazione Kafka → Flink → PostgreSQL
 * [x] Test end-to-end della pipeline
-* [x] Coverage della logica degli alert al 100%
+* [x] Coverage di `alert_logic.py` al 100%
+* [x] Coverage di `telemetry_job.py` all'81%
+* [x] Coverage complessiva dei moduli analizzati all'83%
 * [x] Pipeline CI/CD tramite GitHub Actions
 * [x] Dashboard Grafana
 * [x] Collegamento Grafana → PostgreSQL
@@ -923,5 +950,3 @@ Possibili estensioni del progetto:
 * configurazione automatica dell'avvio del job Flink;
 * aggiunta di ulteriori metriche operative;
 * eventuale persistenza/versionamento della configurazione della dashboard Grafana.
-
-
