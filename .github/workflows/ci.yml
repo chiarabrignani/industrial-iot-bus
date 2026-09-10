@@ -53,15 +53,14 @@ jobs:
       - name: Build delle immagini Docker
         run: docker compose build
 
-      - name: Salva le immagini Docker
-        run: |
-          docker compose config --images > images.txt
-          docker save $(cat images.txt) -o docker-images.tar
-
       - name: Crea artefatto di deployment
         uses: actions/upload-artifact@v4
         with:
           name: deployment-bundle
           path: |
-            docker-images.tar
             docker-compose.yml
+            bridge/
+            flink/
+            simulator/
+            mqtt/
+            postgres/

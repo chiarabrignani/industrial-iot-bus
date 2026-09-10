@@ -831,10 +831,14 @@ Le attività svolte sono:
 L'artefatto prodotto contiene:
 
     deployment-bundle
-    ├── docker-images.tar
-    └── docker-compose.yml
+    ├── docker-compose.yml
+    ├── bridge/
+    ├── flink/
+    ├── simulator/
+    ├── mqtt/
+    └── postgres/
 
-In questo modo, una modifica al progetto viene prima verificata automaticamente tramite test e coverage e, se tutti i controlli hanno esito positivo, viene prodotta una versione containerizzata del sistema pronta per essere distribuita.
+In questo modo, una modifica al progetto viene prima verificata automaticamente tramite test e coverage e, se tutti i controlli hanno esito positivo, viene prodotto un pacchetto di deployment verificato e pronto per essere utilizzato nell'ambiente di esecuzione.
 
 La dipendenza tra i due job è definita tramite:
 
